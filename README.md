@@ -1,6 +1,6 @@
 # Heroku Buildpack for Go![travis ci](https://travis-ci.org/heroku/heroku-buildpack-go.svg?branch=master)
 
-云帮 Go 语言项目的源码构建核心部分是基于[Heroku buildpack for java](http://devcenter.heroku.com/articles/buildpack) 来实现的。
+云帮 Go 语言源码构建核心部分是基于[Heroku buildpack for go](https://github.com/heroku/heroku-buildpack-go) 来实现的。
 
 ## 工作原理
 
@@ -29,4 +29,4 @@
 
 ## 授权
 
-根据 MIT 授权证获得许可。 请参阅LICENSE文件
+根据 MIT 授权获得许可。 请参阅LICENSE文件
