@@ -36,13 +36,13 @@ handleDefaultPkgSpec() {
             dep)
                 warn "To install a different package spec set 'metadata.heroku.pkg-spec' in 'Gopkg.toml'"
                 warn ""
-                warn "For more details see: https://devcenter.heroku.com/articles/go-apps-with-dep#build-configuration"
+                warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
                 warn ""
             ;;
             govendor)
                 warn "To install a different package spec set 'heroku.install' in 'vendor/vendor.json'"
                 warn ""
-                warn "For more details see: https://devcenter.heroku.com/articles/go-apps-with-govendor#build-configuration"
+                warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
                 warn ""
             ;;
             glide)
@@ -50,7 +50,7 @@ handleDefaultPkgSpec() {
                 warn ""
                 warn "'heroku config:set GO_INSTALL_PACKAGE_SPEC=\"<pkg spec>\"'"
                 warn ""
-                warn "For more details see: https://devcenter.heroku.com/articles/go-dependencies-via-glide"
+                warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
                 warn ""
             ;;
         esac
@@ -117,7 +117,7 @@ reportVer() {
         *)
             warn ""
             warn "Deprecated or unsupported version of go ($1)"
-            warn "See https://devcenter.heroku.com/articles/go-support#go-versions for supported version information."
+            warn "See https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html for supported version information."
             warn ""
         ;;
     esac

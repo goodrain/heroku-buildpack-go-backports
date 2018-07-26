@@ -275,7 +275,7 @@ determineTool() {
             err "The 'metadata.heroku[\"root-package\"]' field is not specified in 'Gopkg.toml'."
             err "root-package must be set to the root package name used by your repository."
             err ""
-            err "For more details see: https://devcenter.heroku.com/articles/go-apps-with-dep#build-configuration"
+            err "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
             exit 1
         fi
         ver=${GOVERSION:-$(<${depTOML} tq '$.metadata.heroku["go-version"]')}
@@ -286,7 +286,7 @@ determineTool() {
             warn ""
             warn "Defaulting to ${ver}"
             warn ""
-            warn "For more details see: https://devcenter.heroku.com/articles/go-apps-with-dep#build-configuration"
+            warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
             warn ""
         fi
     elif [ -f "${godepsJSON}" ]; then
@@ -313,7 +313,7 @@ determineTool() {
             err "Recent versions of govendor add this field automatically, please upgrade"
             err "and re-run 'govendor init'."
             err ""
-            err "For more details see: https://devcenter.heroku.com/articles/go-apps-with-govendor#build-configuration"
+            err "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
             exit 1
         fi
         ver=${GOVERSION:-$(<${vendorJSON} jq -r .heroku.goVersion)}
@@ -324,7 +324,7 @@ determineTool() {
             warn ""
             warn "Defaulting to ${ver}"
             warn ""
-            warn "For more details see: https://devcenter.heroku.com/articles/go-apps-with-govendor#build-configuration"
+            warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
             warn ""
         fi
     elif [ -f "${glideYAML}" ]; then
@@ -335,7 +335,7 @@ determineTool() {
         setGoVersionFromEnvironment
     else
         err "dep, Godep, GB or govendor are required. For instructions:"
-        err "https://devcenter.heroku.com/articles/go-support"
+        err "https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
         exit 1
     fi
 }
