@@ -13,11 +13,14 @@ source "${buildpack}/lib/common.sh"
 ensureInPath "jq-linux64" "${cache}/.jq/bin"
 
 DefaultGoVersion="$(<${DataJSON} jq -r '.Go.DefaultVersion')"
+DepVersion="$(<${DataJSON} jq -r '.Dep.DefaultVersion')"
 GlideVersion="$(<${DataJSON} jq -r '.Glide.DefaultVersion')"
 GovendorVersion="$(<${DataJSON} jq -r '.Govendor.DefaultVersion')"
 GBVersion="$(<${DataJSON} jq -r '.GB.DefaultVersion')"
 PkgErrorsVersion="$(<${DataJSON} jq -r '.PkgErrors.DefaultVersion')"
 MercurialVersion="$(<${DataJSON} jq -r '.HG.DefaultVersion')"
+MattesMigrateVersion="$(<${DataJSON} jq -r '.MattesMigrate.DefaultVersion')"
+TQVersion="$(<${DataJSON} jq -r '.tq.DefaultVersion')"
 # BazaarVersion="2.7.0"
 
 # For specified versions of Go we need to keep concurrency.sh
@@ -30,18 +33,24 @@ handleDefaultPkgSpec() {
         warn "Installing package '.' (default)"
         warn ""
         case "${TOOL}" in
-            govendor)
-                warn "To install a different package spec set 'goodrain.install' in 'vendor/vendor.json'"
+            dep)
+                warn "To install a different package spec set 'metadata.heroku.pkg-spec' in 'Gopkg.toml'"
                 warn ""
-                warn "For more details see: http://docs.goodrain.com/languages/golang.html"
+                warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
+                warn ""
+            ;;
+            govendor)
+                warn "To install a different package spec set 'heroku.install' in 'vendor/vendor.json'"
+                warn ""
+                warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
                 warn ""
             ;;
             glide)
                 warn "To install a different package spec for the next build run:"
                 warn ""
-                warn "' Goodrain config:set GO_INSTALL_PACKAGE_SPEC=\"<pkg spec>\"'"
+                warn "'heroku config:set GO_INSTALL_PACKAGE_SPEC=\"<pkg spec>\"'"
                 warn ""
-                warn "For more details see: http://docs.goodrain.com/languages/golang.html"
+                warn "For more details see: https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html"
                 warn ""
             ;;
         esac
@@ -67,21 +76,26 @@ urlFor() {
     case $ver in
         devel*)
             local sha=$(echo ${ver} | cut -d - -f 2)  #assumes devel-<short sha> or devel-<full sha>
-            #echo https://github.com/golang/go/archive/$sha.tar.gz
-            echo http://lang.goodrain.me/golang/$sha.tar.gz
+            echo https://github.com/golang/go/archive/$sha.tar.gz
         ;;
         *)
             local file="${ver}.linux-amd64.tar.gz"
-            #echo ${BucketURL}/${file}
-            echo http://lang.goodrain.me/golang/${file}
+            echo ${BucketURL}/${file}
         ;;
     esac
 }
 
-# Expand to supported versions of Go, see data.json for supported expansions.
-# All others are returned as is.
+# Expand a version identifier to supported versions of Go. If the version
+# identifier starts with one or more digits, then "go" is prepended before
+# expansion. So `1.9` => `go1.9`, `1.9.4` => `go1.9.4`, `devel` => `devel`. See
+# data.json for supported expansions. All others are returned as is without go
+# prepended to it.
 expandVer() {
-    echo $(<${DataJSON} jq -r 'if .Go.VersionExpansion."'${1}'" then .Go.VersionExpansion."'${1}'" else "'${1}'" end')
+    local v="${1}"
+    if [[ "${v}" =~ ^[[:digit:]]+ ]]; then
+        v="go${v}"
+    fi
+    echo $(<${DataJSON} jq -r 'if .Go.VersionExpansion."'${v}'" then .Go.VersionExpansion."'${v}'" else "'${v}'" end')
 }
 
 # Report deprecated versions to user
@@ -103,7 +117,7 @@ reportVer() {
         *)
             warn ""
             warn "Deprecated or unsupported version of go ($1)"
-            warn "See http://docs.goodrain.com/languages/golang.html for supported version information."
+            warn "See https://www.rainbond.com/docs/stable/user-manual/language-support/golang.html for supported version information."
             warn ""
         ;;
     esac
@@ -111,7 +125,7 @@ reportVer() {
 
 ensureHG() {
     local hgVersion="${1}"
-    local tmp=$(mktemp -d)
+    local tmp="$(mktemp -d)"
     local hgPath="${cache}/hg/${hgVersion}"
     if [ -x "${hgPath}/bin/hg" ]; then
         step "Using hg v${hgVersion}"
@@ -144,6 +158,57 @@ ensureGlide() {
         ensureInPath "${gFile}" "${gPath}" "tar -C ${gPath} --strip-components=1 -zxf"
         chmod a+x "${gBin}"
         rm -f "${targetFile}"
+    fi
+}
+
+ensureMattesMigrate() {
+    local mmVersion="DEFAULT"
+    case "${TOOL}" in
+        govendor)
+            mmVersion="$(<${vendorJSON} jq -r '.heroku.additionalTools | map(select(contains("github.com/mattes/migrate@"))) | if .[0] then .[0] else "@DEFAULT" end | split("@") | .[1]')"
+        ;;
+        dep)
+            f=$(<${depTOML} tq '$.metadata.heroku["additional-tools"]' | grep ^github.com/mattes/migrate | sed s:github.com/mattes/migrate::)
+            f=${f:-"@DEFAULT"}
+            mmVersion="$(echo $f | cut -d @ -f 2)"
+        ;;
+    esac
+    if [[ "${mmVersion}" = "DEFAULT" ]]; then
+        mmVersion="${MattesMigrateVersion}"
+    fi
+    local tmp="$(mktemp -d)"
+    local mmPath="${cache}/mattesMigrate/${mmVersion}"
+    local targetFile="${build}/bin/migrate"
+
+    if [ -x "targetFile" ]; then
+        warning '"migrate" binary already exists in ~/bin, not installing github.com/mattes/migrate'
+    else
+        rm -rf "$(dirname "${mmPath}")"
+        mkdir -p "${mmPath}"
+        step "Installing github.com/mattes/migrate ${mmVersion}"
+        ensureFile "migrate-${mmVersion}-linux-amd64.tar.gz" "${tmp}" "tar -C ${mmPath} -zxf"
+        mv "${mmPath}/migrate.linux-amd64" "${targetFile}"
+        chmod a+x "${targetFile}"
+    fi
+}
+
+wantMattesMigrate() {
+    case "${TOOL}" in
+        govendor)
+            <${vendorJSON} jq -e '.heroku.additionalTools | contains(["github.com/mattes/migrate"])' &> /dev/null
+        ;;
+        dep)
+          <${depTOML} tq '$.metadata.heroku["additional-tools"]' | grep "^github.com/mattes/migrate$" &> /dev/null
+        ;;
+        *)
+            false
+        ;;
+    esac
+}
+
+installMattesMigrateIfWanted() {
+    if wantMattesMigrate; then
+        ensureMattesMigrate
     fi
 }
 
@@ -207,7 +272,7 @@ ensureGo() {
                     mkdir -p "${goVersion}"
                     pushd "${goVersion}" &> /dev/null
                         local sha=$(echo ${goVersion} | cut -d - -f 2)  #assumes devel-<short sha> or devel-<full sha>
-                        local url="http://lang.goodrain.me/golang/$sha.tar.gz"
+                        local url="https://github.com/golang/go/archive/$sha.tar.gz"
                         start "Downloading development Go version ${goVersion}"
                             ${CURL} ${url} | tar zxf -
                             mv go-${sha}* go
@@ -230,6 +295,11 @@ ensureGo() {
 
     export GOROOT="${goPath}"
     PATH="${goPath}/bin:${PATH}"
+
+    # Export GOCACHE if Go >= 1.10
+    if go env | grep -q '^GOCACHE='; then
+      export GOCACHE="${cache}/go-build-cache"
+    fi
 }
 
 setGoVersionFromEnvironment() {
@@ -237,7 +307,7 @@ setGoVersionFromEnvironment() {
         warn ""
         warn "'GOVERSION' isn't set, defaulting to '${DefaultGoVersion}'"
         warn ""
-        warn "Run 'Goodrain config:set GOVERSION=goX.Y' to set the Go version to use"
+        warn "Run 'heroku config:set GOVERSION=goX.Y' to set the Go version to use"
         warn "for future builds"
         warn ""
     fi
@@ -250,7 +320,7 @@ warnGoVersionOverride() {
         warn "     \$GOVERSION = ${GOVERSION}"
         warn ""
         warn "If this isn't what you want please run:'"
-        warn "  Goodrain config:unset GOVERSION -a <app>"
+        warn "  heroku config:unset GOVERSION -a <app>"
         warn ""
     fi
 }
@@ -261,7 +331,7 @@ warnPackageSpecOverride() {
         warn "     \$GO_INSTALL_PACKAGE_SPEC = ${GO_INSTALL_PACKAGE_SPEC}"
         warn ""
         warn "If this isn't what you want please run:'"
-        warn "  Goodrain config:unset GO_INSTALL_PACKAGE_SPEC -a <app>"
+        warn "  heroku config:unset GO_INSTALL_PACKAGE_SPEC -a <app>"
         warn ""
     fi
 }
@@ -291,6 +361,10 @@ setupGOPATH() {
 }
 
 loadEnvDir "${env_dir}"
+
+setGitCredHelper "${env_dir}"
+trap clearGitCredHelper INT TERM EXIT
+
 determineTool
 
 ver=$(expandVer $ver)
@@ -309,10 +383,10 @@ ensureGo "${ver}"
 mkdir -p "${build}/bin"
 
 # If $GO_LINKER_SYMBOL and GO_LINKER_VALUE are set, tell the linker to DTRT
-FLAGS=(-tags goodrain)
+FLAGS=(-tags heroku)
 if [ -n "${GO_LINKER_SYMBOL}" -a -n "${GO_LINKER_VALUE}" ]; then
     case "${ver}" in
-        go1.0*|go1.1*|go1.2*|go1.3*|go1.4*)
+        go1|go1.0.*|go1.1|go1.1.*|go1.2|go1.2.*|go1.3|go1.3.*|go1.4|go1.4.*)
             xval="${GO_LINKER_SYMBOL} ${GO_LINKER_VALUE}"
         ;;
         *)
@@ -326,6 +400,30 @@ export GOPATH
 
 # GB installation
 case "${TOOL}" in
+    dep)
+        eval "$(setupGOPATH ${name})"
+        depTOML="${src}/Gopkg.toml"
+
+        pkgs=${GO_INSTALL_PACKAGE_SPEC:-$(<${depTOML} tq '$.metadata.heroku["install"]')}
+        if [ -z "${pkgs}" ]; then
+            pkgs="default"
+        fi
+        warnPackageSpecOverride
+        handleDefaultPkgSpec
+
+        unset GIT_DIR # unset git dir or it will mess with goinstall
+        cd "${src}"
+
+        if [ "$(< ${depTOML} tq '$.metadata.heroku["ensure"]')" != "false" ]; then
+            ensureInPath "dep-${DepVersion}-linux-amd64" "${cache}/dep/bin"
+            step "Fetching any unsaved dependencies (dep ensure)"
+            dep ensure
+        fi
+        massagePkgSpecForVendor
+
+        step "Running: go install -v ${FLAGS[@]} ${pkgs}"
+        go install -v "${FLAGS[@]}" ${pkgs} 2>&1
+    ;;
     godep)
         eval "$(setupGOPATH ${name})"
         godepsJSON="${src}/Godeps/Godeps.json"
@@ -349,7 +447,7 @@ case "${TOOL}" in
             if [ -n "${GO15VENDOREXPERIMENT}" ]; then
                 warn ""
                 warn "GO15VENDOREXPERIMENT is set, but is not supported by ${ver}"
-                warn "run \`Goodrain config:unset GO15VENDOREXPERIMENT\` to unset."
+                warn "run \`heroku config:unset GO15VENDOREXPERIMENT\` to unset."
                 warn ""
             fi
         fi
@@ -405,8 +503,10 @@ case "${TOOL}" in
         unset GIT_DIR
         cd "${src}"
 
-        step "Fetching any unsaved dependencies (glide install)"
-        glide install 2>&1
+        if [[ "${GLIDE_SKIP_INSTALL}" != "true" ]]; then
+            step "Fetching any unsaved dependencies (glide install)"
+            glide install 2>&1
+        fi
 
         massagePkgSpecForVendor
 
@@ -427,6 +527,8 @@ case "${TOOL}" in
         rm -rf pkg
     ;;
 esac
+
+installMattesMigrateIfWanted
 
 if [ -n "${src}" -a "${src}" != "${build}" -a -e "${src}/Procfile" ]; then
     mv -t "${build}" "${src}/Procfile"
